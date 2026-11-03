@@ -1,0 +1,1126 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fault Isolation Console</title>
+<style>
+:root{
+  --bg:#0a0d12; --bg2:#0e1218; --panel:#121821; --panel2:#161d28; --line:#212b38; --line2:#2b3746;
+  --text:#e6edf5; --muted:#8a97a8; --dim:#5d6a7b;
+  --ok:#22c55e; --ok-bg:rgba(34,197,94,.12);
+  --warn:#f5a524; --warn-bg:rgba(245,165,36,.13);
+  --alarm:#ef4444; --alarm-bg:rgba(239,68,68,.14);
+  --info:#38bdf8; --info-bg:rgba(56,189,248,.12);
+  --c1:#38bdf8; --c2:#a78bfa; --c3:#f472b6; --c4:#34d399; --c5:#fbbf24; --c6:#fb7185;
+  --mono:"Cascadia Mono","JetBrains Mono",Consolas,"SFMono-Regular",Menlo,monospace;
+  --sans:"Segoe UI Variable","Segoe UI",Inter,system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif;
+  --r:10px;
+}
+:root[data-theme="light"]{
+  --bg:#eef1f5; --bg2:#e6eaf0; --panel:#ffffff; --panel2:#f6f8fb; --line:#dde3ea; --line2:#cfd7e1;
+  --text:#0f1720; --muted:#5a6676; --dim:#8994a3;
+  --ok-bg:rgba(22,163,74,.10); --warn-bg:rgba(217,119,6,.12); --alarm-bg:rgba(220,38,38,.10); --info-bg:rgba(2,132,199,.10);
+  --ok:#16a34a; --warn:#d97706; --alarm:#dc2626; --info:#0284c7;
+  --c1:#0284c7; --c2:#7c3aed; --c3:#db2777; --c4:#059669; --c5:#b45309; --c6:#e11d48;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14px;-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+/* ---------- top bar ---------- */
+.top{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:16px;padding:10px 18px;background:color-mix(in srgb,var(--bg2) 92%,transparent);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+.brand{display:flex;align-items:center;gap:12px;min-width:0}
+.logo{width:34px;height:34px;border-radius:8px;display:grid;place-items:center;background:linear-gradient(135deg,#0ea5e9,#6366f1);flex:none}
+.logo svg{width:20px;height:20px}
+.brand h1{font-size:15px;margin:0;letter-spacing:.06em;font-weight:700;white-space:nowrap}
+.brand .sub{font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.spacer{flex:1}
+.pill{display:inline-flex;align-items:center;gap:8px;padding:6px 11px;border-radius:999px;border:1px solid var(--line2);background:var(--panel);font-size:12px;white-space:nowrap}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--dim);flex:none}
+.dot.live{background:var(--ok);box-shadow:0 0 0 3px var(--ok-bg);animation:pulse 1.6s infinite}
+.dot.demo{background:var(--info);box-shadow:0 0 0 3px var(--info-bg)}
+@keyframes pulse{50%{box-shadow:0 0 0 6px transparent}}
+.btn{display:inline-flex;align-items:center;gap:7px;padding:7px 12px;border-radius:8px;border:1px solid var(--line2);background:var(--panel);cursor:pointer;font-size:12.5px;font-weight:600;white-space:nowrap;transition:background .15s,border-color .15s}
+.btn:hover{background:var(--panel2);border-color:var(--dim)}
+.btn.primary{background:#2563eb;border-color:#2563eb;color:#fff}
+.btn.primary:hover{background:#1d4ed8}
+.btn.danger{background:var(--alarm);border-color:var(--alarm);color:#fff}
+.btn.ghost{background:transparent}
+.btn.on{border-color:var(--alarm);color:var(--alarm)}
+.btn svg{width:15px;height:15px}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.clock{font-family:var(--mono);font-size:12px;color:var(--muted);text-align:right;line-height:1.3}
+/* ---------- alarm banner ---------- */
+.banner{display:none;align-items:center;gap:14px;margin:14px 18px 0;padding:11px 14px;border-radius:var(--r);border:1px solid}
+.banner.show{display:flex}
+.banner.warn{background:var(--warn-bg);border-color:color-mix(in srgb,var(--warn) 45%,transparent)}
+.banner.alarm{background:var(--alarm-bg);border-color:color-mix(in srgb,var(--alarm) 55%,transparent)}
+.banner .ico{width:28px;height:28px;border-radius:7px;display:grid;place-items:center;flex:none;font-weight:800}
+.banner.warn .ico{background:var(--warn);color:#111}
+.banner.alarm .ico{background:var(--alarm);color:#fff;animation:blink 1s steps(2) infinite}
+@keyframes blink{50%{opacity:.35}}
+.banner b{font-size:13.5px;letter-spacing:.02em}
+.banner .txt{flex:1;min-width:0}
+.banner .txt div{font-size:12.5px;color:var(--muted);margin-top:2px}
+/* ---------- layout ---------- */
+main{padding:14px 18px 28px;display:grid;gap:14px;grid-template-columns:repeat(12,minmax(0,1fr))}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);min-width:0}
+.ph{display:flex;align-items:center;gap:10px;padding:11px 14px;border-bottom:1px solid var(--line)}
+.ph h2{margin:0;font-size:11.5px;letter-spacing:.11em;text-transform:uppercase;color:var(--muted);font-weight:700}
+.ph .r{margin-left:auto;display:flex;gap:6px;align-items:center}
+.pb{padding:14px}
+.span3{grid-column:span 3}.span4{grid-column:span 4}.span5{grid-column:span 5}.span6{grid-column:span 6}.span7{grid-column:span 7}.span8{grid-column:span 8}.span12{grid-column:span 12}
+@media (max-width:1400px){.span3{grid-column:span 6}.span4{grid-column:span 6}.span5,.span7{grid-column:span 12}.span8{grid-column:span 12}}
+@media (max-width:820px){main{padding:12px}.span3,.span4,.span6{grid-column:span 12}.top{flex-wrap:wrap}.brand .sub{display:none}}
+/* ---------- health ---------- */
+.health{display:grid;grid-template-columns:200px 1fr;gap:16px;align-items:center}
+@media (max-width:520px){.health{grid-template-columns:1fr}}
+.gauge{position:relative;width:200px;height:200px;margin:auto}
+.gauge svg{width:100%;height:100%}
+.gauge .val{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.gauge .num{font-size:46px;font-weight:700;font-family:var(--mono);letter-spacing:-.02em;line-height:1}
+.gauge .lbl{font-size:11px;color:var(--muted);letter-spacing:.12em;margin-top:6px}
+.state{display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border-radius:7px;font-weight:800;letter-spacing:.12em;font-size:13px}
+.state.s0{background:var(--ok-bg);color:var(--ok)} .state.s1{background:var(--warn-bg);color:var(--warn)}
+.state.s2,.state.s3{background:var(--alarm-bg);color:var(--alarm)} .state.sx{background:var(--panel2);color:var(--muted)}
+.hb-rows{display:grid;gap:9px;margin-top:14px}
+.hb{display:grid;grid-template-columns:96px 1fr 44px;gap:10px;align-items:center;font-size:12px;color:var(--muted)}
+.bar{height:6px;background:var(--panel2);border-radius:99px;overflow:hidden;border:1px solid var(--line)}
+.bar i{display:block;height:100%;border-radius:99px;background:var(--ok);transition:width .4s,background .4s}
+/* ---------- KPI tiles ---------- */
+.kpis{grid-column:span 12;display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:14px}
+@media (max-width:1400px){.kpis{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (max-width:620px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.kpi{padding:13px 14px 10px;position:relative;overflow:hidden}
+.kpi .k{display:flex;align-items:center;justify-content:space-between;font-size:11px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;font-weight:700}
+.kpi .v{display:flex;align-items:baseline;gap:6px;margin-top:8px}
+.kpi .v b{font-family:var(--mono);font-size:28px;font-weight:600;letter-spacing:-.02em}
+.kpi .v span{color:var(--muted);font-size:12.5px}
+.kpi .meta{display:flex;justify-content:space-between;font-size:11.5px;color:var(--muted);margin-top:4px;font-family:var(--mono)}
+.kpi canvas{display:block;width:100%;height:36px;margin-top:6px}
+.kpi::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--line2)}
+.kpi.w::before{background:var(--warn)} .kpi.a::before{background:var(--alarm)} .kpi.o::before{background:var(--ok)}
+.tag{font-size:10.5px;padding:2px 7px;border-radius:5px;font-weight:700;letter-spacing:.06em;font-family:var(--mono)}
+.tag.o{background:var(--ok-bg);color:var(--ok)} .tag.w{background:var(--warn-bg);color:var(--warn)} .tag.a{background:var(--alarm-bg);color:var(--alarm)} .tag.x{background:var(--panel2);color:var(--muted)} .tag.i{background:var(--info-bg);color:var(--info)}
+/* ---------- charts ---------- */
+.chart{position:relative;height:210px}
+.chart canvas{position:absolute;inset:0;width:100%;height:100%}
+.legend{display:flex;gap:12px;flex-wrap:wrap;font-size:11.5px;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.legend i{width:10px;height:3px;border-radius:2px;display:inline-block}
+.seg{display:inline-flex;border:1px solid var(--line2);border-radius:7px;overflow:hidden}
+.seg button{background:transparent;border:0;padding:4px 9px;font-size:11.5px;cursor:pointer;color:var(--muted)}
+.seg button.on{background:var(--panel2);color:var(--text)}
+.tip{position:absolute;pointer-events:none;background:var(--bg2);border:1px solid var(--line2);border-radius:7px;padding:7px 9px;font-size:11.5px;font-family:var(--mono);white-space:nowrap;display:none;z-index:5;box-shadow:0 8px 24px rgba(0,0,0,.35)}
+/* ---------- isolation matrix ---------- */
+.matrix{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+@media (max-width:620px){.matrix{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.cell{border:1px solid var(--line);border-radius:9px;padding:11px 12px;background:var(--panel2);position:relative}
+.cell .t{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:700;display:flex;justify-content:space-between;align-items:center;gap:6px}
+.cell .m{font-size:12.5px;margin-top:7px;min-height:34px;line-height:1.35}
+.lamp{width:10px;height:10px;border-radius:50%;background:var(--dim);flex:none}
+.lamp.o{background:var(--ok);box-shadow:0 0 8px var(--ok)} .lamp.w{background:var(--warn);box-shadow:0 0 8px var(--warn)} .lamp.a{background:var(--alarm);box-shadow:0 0 10px var(--alarm);animation:blink 1s steps(2) infinite}
+.cell.a{border-color:color-mix(in srgb,var(--alarm) 55%,transparent)} .cell.w{border-color:color-mix(in srgb,var(--warn) 50%,transparent)}
+/* ---------- diagnosis ---------- */
+.diag{display:grid;gap:10px}
+.dcard{border:1px solid var(--line);border-left:3px solid var(--dim);border-radius:9px;padding:11px 13px;background:var(--panel2)}
+.dcard.a{border-left-color:var(--alarm)} .dcard.w{border-left-color:var(--warn)} .dcard.i{border-left-color:var(--info)} .dcard.o{border-left-color:var(--ok)}
+.dcard .h{display:flex;gap:8px;align-items:center;justify-content:space-between}
+.dcard .h b{font-size:13.5px}
+.dcard p{margin:6px 0 0;font-size:12.5px;color:var(--muted);line-height:1.45}
+.dcard p em{font-style:normal;color:var(--text)}
+.conf{font-size:11px;color:var(--muted);font-family:var(--mono)}
+/* ---------- predictive ---------- */
+.pgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.pbox{border:1px solid var(--line);border-radius:9px;padding:11px 12px;background:var(--panel2)}
+.pbox .t{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:700}
+.pbox .big{font-family:var(--mono);font-size:22px;margin-top:6px;font-weight:600}
+.pbox .s{font-size:11.5px;color:var(--muted);margin-top:3px}
+.ztable{width:100%;border-collapse:collapse;margin-top:4px;font-size:12px}
+.ztable td{padding:6px 4px;border-bottom:1px solid var(--line)}
+.ztable td:first-child{color:var(--muted)}
+.zbar{position:relative;height:6px;background:var(--panel);border:1px solid var(--line);border-radius:99px}
+.zbar i{position:absolute;top:-1px;bottom:-1px;border-radius:99px}
+.zbar::after{content:"";position:absolute;left:50%;top:-3px;bottom:-3px;width:1px;background:var(--dim)}
+/* ---------- vibration ---------- */
+.vgrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+@media (max-width:620px){.vgrid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.axes{display:grid;gap:8px;margin-top:12px}
+.axes .hb{grid-template-columns:28px 1fr 64px}
+/* ---------- log + console ---------- */
+.log{max-height:280px;overflow:auto}
+table.ev{width:100%;border-collapse:collapse;font-size:12.5px}
+table.ev th{position:sticky;top:0;background:var(--panel);text-align:left;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);padding:8px 10px;border-bottom:1px solid var(--line)}
+table.ev td{padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+table.ev td.mono{color:var(--muted);white-space:nowrap}
+.empty{color:var(--dim);font-size:12.5px;padding:18px;text-align:center}
+.console{height:220px;overflow:auto;font-family:var(--mono);font-size:11.5px;line-height:1.5;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;color:var(--muted);white-space:pre-wrap;word-break:break-all}
+.console .tx{color:var(--info)} .console .ev{color:var(--warn)} .console .er{color:var(--alarm)}
+.cmdrow{display:flex;gap:8px;margin-top:8px}
+input,select{font:inherit;background:var(--bg);color:var(--text);border:1px solid var(--line2);border-radius:7px;padding:7px 9px;min-width:0}
+input:focus,select:focus{outline:2px solid #2563eb;outline-offset:-1px}
+/* ---------- device ---------- */
+.sens{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.sens div{display:flex;align-items:center;gap:8px;font-size:12.5px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel2)}
+.cfg{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 12px;margin-top:12px}
+.cfg label{display:grid;gap:4px;font-size:11px;color:var(--muted);letter-spacing:.04em}
+.cfg input{width:100%}
+.actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;font-size:12px;margin-top:12px}
+.kv span:nth-child(odd){color:var(--muted)}
+/* ---------- demo drawer ---------- */
+.inject{display:none;flex-wrap:wrap;gap:6px;align-items:center;margin:14px 18px 0;padding:10px 12px;border:1px dashed color-mix(in srgb,var(--info) 50%,transparent);border-radius:var(--r);background:var(--info-bg)}
+.inject.show{display:flex}
+.inject b{font-size:11.5px;letter-spacing:.1em;color:var(--info);margin-right:6px}
+.inject .btn{padding:5px 10px;font-size:12px}
+.inject .btn.sel{background:var(--info);border-color:var(--info);color:#04121c}
+/* ---------- modal ---------- */
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;place-items:center;z-index:50;padding:16px}
+.modal.show{display:grid}
+.modal .box{background:var(--panel);border:1px solid var(--line2);border-radius:12px;max-width:520px;width:100%;padding:20px}
+.modal h3{margin:0 0 8px}
+.modal p{color:var(--muted);font-size:13px;line-height:1.5}
+footer{padding:0 18px 22px;color:var(--dim);font-size:11.5px;display:flex;gap:16px;flex-wrap:wrap;font-family:var(--mono)}
+.toast{position:fixed;right:18px;bottom:18px;z-index:60;display:grid;gap:8px}
+.toast div{background:var(--panel);border:1px solid var(--line2);border-left:3px solid var(--info);padding:10px 14px;border-radius:8px;font-size:12.5px;box-shadow:0 10px 30px rgba(0,0,0,.35);animation:tin .25s ease-out}
+@keyframes tin{from{transform:translateY(8px);opacity:0}}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="brand">
+    <div class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h3l3-7 4 14 3-7h5"/></svg></div>
+    <div style="min-width:0">
+      <h1>FAULT ISOLATION CONSOLE</h1>
+      <div class="sub"><span id="assetName">MTR-01 · DC Gear Motor</span> · STM32 condition monitoring &amp; protection</div>
+    </div>
+  </div>
+  <div class="spacer"></div>
+  <div class="pill" id="connPill"><span class="dot" id="connDot"></span><span id="connText">Offline</span></div>
+  <button class="btn primary" id="btnConnect"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 7V3m6 4V3M7 7h10v4a5 5 0 0 1-10 0V7zm5 9v5"/></svg><span>Connect</span></button>
+  <button class="btn" id="btnDemo" title="Run a simulated motor (no hardware needed)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 5v14l11-7z"/></svg><span>Demo</span></button>
+  <button class="btn" id="btnRec" title="Record telemetry to CSV"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="6"/></svg><span>Record</span></button>
+  <button class="btn ghost" id="btnTheme" title="Toggle light / dark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 13A9 9 0 1 1 11 3a7 7 0 0 0 10 10z"/></svg></button>
+  <div class="clock"><div id="clk">--:--:--</div><div id="uptime">session 00:00:00</div></div>
+</header>
+
+<div class="inject" id="inject">
+  <b>FAULT INJECTION</b>
+  <button class="btn sel" data-sc="normal">Normal</button>
+  <button class="btn" data-sc="overload">Mechanical overload</button>
+  <button class="btn" data-sc="stall">Rotor stall</button>
+  <button class="btn" data-sc="imbalance">Imbalance / loose mount</button>
+  <button class="btn" data-sc="bearing">Bearing / gear wear</button>
+  <button class="btn" data-sc="overheat">Overheating</button>
+  <button class="btn" data-sc="undervolt">Supply sag</button>
+  <button class="btn" data-sc="open">Open circuit</button>
+  <button class="btn" data-sc="imufail">IMU failure</button>
+  <button class="btn" data-sc="tempfail">LM35 failure</button>
+</div>
+
+<div class="banner" id="banner">
+  <div class="ico">!</div>
+  <div class="txt"><b id="bannerTitle">ALARM</b><div id="bannerSub"></div></div>
+  <button class="btn" id="btnAck">Acknowledge</button>
+  <button class="btn danger" id="btnBannerReset">Reset trip</button>
+</div>
+
+<main>
+  <!-- Health -->
+  <section class="panel span4">
+    <div class="ph"><h2>Asset Health</h2><div class="r"><span class="tag x" id="fwTag">FW —</span></div></div>
+    <div class="pb health">
+      <div class="gauge">
+        <svg viewBox="0 0 200 200">
+          <defs><linearGradient id="gg" x1="0" x2="1"><stop offset="0" stop-color="#ef4444"/><stop offset=".5" stop-color="#f5a524"/><stop offset="1" stop-color="#22c55e"/></linearGradient></defs>
+          <circle cx="100" cy="100" r="84" fill="none" stroke="var(--panel2)" stroke-width="14" stroke-dasharray="395.8 527.8" transform="rotate(135 100 100)" stroke-linecap="round"/>
+          <circle id="gArc" cx="100" cy="100" r="84" fill="none" stroke="url(#gg)" stroke-width="14" stroke-dasharray="0 527.8" transform="rotate(135 100 100)" stroke-linecap="round" style="transition:stroke-dasharray .6s"/>
+          <g id="gTicks"></g>
+        </svg>
+        <div class="val"><div class="num" id="hNum">--</div><div class="lbl">HEALTH INDEX</div></div>
+      </div>
+      <div>
+        <div class="state sx" id="stateBadge">NO DATA</div>
+        <div style="font-size:12.5px;color:var(--muted);margin-top:9px;line-height:1.45" id="stateLine">Connect the controller or start the demo to begin monitoring.</div>
+        <div class="hb-rows">
+          <div class="hb"><span>Protection</span><div class="bar"><i id="hbDev" style="width:0"></i></div><span class="mono" id="hbDevV">--</span></div>
+          <div class="hb"><span>Anomaly</span><div class="bar"><i id="hbAn" style="width:0"></i></div><span class="mono" id="hbAnV">--</span></div>
+          <div class="hb"><span>Trend</span><div class="bar"><i id="hbTr" style="width:0"></i></div><span class="mono" id="hbTrV">--</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Fault isolation matrix -->
+  <section class="panel span8">
+    <div class="ph"><h2>Fault Isolation Matrix</h2><div class="r"><span class="tag x" id="faultCount">0 active</span></div></div>
+    <div class="pb"><div class="matrix" id="matrix"></div></div>
+  </section>
+
+  <!-- KPIs -->
+  <div class="kpis" id="kpis"></div>
+
+  <!-- Charts -->
+  <section class="panel span6">
+    <div class="ph"><h2>Thermal</h2><div class="r"><div class="legend"><span><i style="background:var(--c5)"></i>Motor °C</span><span><i style="background:var(--c5);opacity:.5"></i>Forecast</span></div></div></div>
+    <div class="pb"><div class="chart" id="chTemp"></div></div>
+  </section>
+  <section class="panel span6">
+    <div class="ph"><h2>Electrical</h2><div class="r"><div class="legend"><span><i style="background:var(--c1)"></i>Current A</span><span><i style="background:var(--c2)"></i>Power W</span></div></div></div>
+    <div class="pb"><div class="chart" id="chElec"></div></div>
+  </section>
+  <section class="panel span6">
+    <div class="ph"><h2>Vibration</h2><div class="r"><div class="legend"><span><i style="background:var(--c3)"></i>RMS g</span><span><i style="background:var(--c6);opacity:.6"></i>Peak g</span></div></div></div>
+    <div class="pb"><div class="chart" id="chVib"></div></div>
+  </section>
+  <section class="panel span6">
+    <div class="ph"><h2>Speed &amp; Supply</h2><div class="r"><div class="legend"><span><i style="background:var(--c4)"></i>RPM</span><span><i style="background:var(--c1);opacity:.6"></i>Supply V</span></div></div></div>
+    <div class="pb"><div class="chart" id="chRpm"></div></div>
+  </section>
+
+  <!-- Diagnosis -->
+  <section class="panel span5">
+    <div class="ph"><h2>Diagnosis &amp; Recommended Action</h2></div>
+    <div class="pb"><div class="diag" id="diag"></div></div>
+  </section>
+
+  <!-- Predictive -->
+  <section class="panel span4">
+    <div class="ph"><h2>Predictive Analytics</h2><div class="r"><button class="btn" id="btnRelearn" style="padding:4px 9px;font-size:11.5px">Relearn baseline</button></div></div>
+    <div class="pb">
+      <div class="pgrid">
+        <div class="pbox"><div class="t">Baseline</div><div class="big" id="pBase">—</div><div class="s" id="pBaseS">waiting for stable running</div></div>
+        <div class="pbox"><div class="t">Anomaly score</div><div class="big" id="pAn">—</div><div class="s" id="pAnS">deviation from learned normal</div></div>
+        <div class="pbox"><div class="t">Temp → warning</div><div class="big" id="pTtw">—</div><div class="s" id="pTtwS">linear trend, last 2 min</div></div>
+        <div class="pbox"><div class="t">Vibration → warning</div><div class="big" id="pVtw">—</div><div class="s" id="pVtwS">linear trend, last 3 min</div></div>
+      </div>
+      <table class="ztable" id="ztable"></table>
+    </div>
+  </section>
+
+  <!-- Vibration analysis -->
+  <section class="panel span3">
+    <div class="ph"><h2>Vibration Signature</h2></div>
+    <div class="pb">
+      <div class="vgrid" style="grid-template-columns:repeat(2,minmax(0,1fr))">
+        <div class="pbox"><div class="t">Dominant f</div><div class="big" id="vF">—</div><div class="s">Hz (FFT, 256 pt)</div></div>
+        <div class="pbox"><div class="t">Kurtosis</div><div class="big" id="vK">—</div><div class="s" id="vKs">3.0 = smooth</div></div>
+        <div class="pbox"><div class="t">Crest factor</div><div class="big" id="vC">—</div><div class="s">peak / RMS</div></div>
+        <div class="pbox"><div class="t">Peak amp</div><div class="big" id="vA">—</div><div class="s">g @ dominant f</div></div>
+      </div>
+      <div class="axes">
+        <div class="hb"><span>X</span><div class="bar"><i id="axX" style="width:0;background:var(--c1)"></i></div><span class="mono" id="axXv">--</span></div>
+        <div class="hb"><span>Y</span><div class="bar"><i id="axY" style="width:0;background:var(--c2)"></i></div><span class="mono" id="axYv">--</span></div>
+        <div class="hb"><span>Z</span><div class="bar"><i id="axZ" style="width:0;background:var(--c3)"></i></div><span class="mono" id="axZv">--</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Event log -->
+  <section class="panel span7">
+    <div class="ph"><h2>Event Log</h2><div class="r"><button class="btn" id="btnLogCsv" style="padding:4px 9px;font-size:11.5px">Export</button><button class="btn" id="btnLogClear" style="padding:4px 9px;font-size:11.5px">Clear</button></div></div>
+    <div class="log"><table class="ev"><thead><tr><th>Time</th><th>Severity</th><th>Source</th><th>Message</th></tr></thead><tbody id="evBody"></tbody></table><div class="empty" id="evEmpty">No events yet.</div></div>
+  </section>
+
+  <!-- Device -->
+  <section class="panel span5">
+    <div class="ph"><h2>Controller &amp; Protection Settings</h2><div class="r"><span class="tag x" id="tripTag">ARMED</span></div></div>
+    <div class="pb">
+      <div class="sens" id="sens"></div>
+      <div class="cfg" id="cfg"></div>
+      <div class="actions">
+        <button class="btn" id="btnApply">Apply to controller</button>
+        <button class="btn" id="btnSave">Save to flash</button>
+        <button class="btn" id="btnZero" title="Relay opens briefly while zeroing">Zero current</button>
+        <button class="btn" id="btnReset">Reset trip</button>
+        <button class="btn danger" id="btnStop">Emergency isolate</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Console -->
+  <section class="panel span12">
+    <div class="ph"><h2>Serial Console</h2><div class="r"><label style="font-size:12px;color:var(--muted);display:flex;gap:6px;align-items:center"><input type="checkbox" id="conRaw"> show telemetry frames</label></div></div>
+    <div class="pb">
+      <div class="console" id="console"></div>
+      <div class="cmdrow"><input id="cmdIn" placeholder="Command e.g.  GET · RESET · SET tw 50 · SET ppr 5" style="flex:1" class="mono"><button class="btn" id="cmdSend">Send</button></div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <span id="fFrames">frames 0</span><span id="fRate">0.0 Hz</span><span id="fErr">parse errors 0</span><span id="fRec"></span><span style="margin-left:auto">Web Serial · 115200 8N1 · JSON lines</span>
+</footer>
+
+<div class="modal" id="modal"><div class="box"><h3 id="mTitle"></h3><p id="mBody"></p><div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px"><button class="btn" id="mClose">Close</button></div></div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+/* =====================================================================
+ *  Fault Isolation Console — single file, no dependencies, works offline
+ * ===================================================================== */
+const $ = id => document.getElementById(id);
+const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+const fmt = (v, d = 1) => (v == null || !isFinite(v)) ? "--" : Number(v).toFixed(d);
+const store = { get(k, d) { try { const v = localStorage.getItem("fis." + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+                set(k, v) { try { localStorage.setItem("fis." + k, JSON.stringify(v)); } catch {} } };
+
+/* ---------------- fault code table (mirrors firmware) ---------------- */
+const FAULTS = [
+  { bit: 0,  id: "TEMP_WARN",   sev: "w", txt: "Motor temperature high",            sys: "thermal" },
+  { bit: 1,  id: "TEMP_CRIT",   sev: "a", txt: "Motor over-temperature",            sys: "thermal" },
+  { bit: 2,  id: "CUR_WARN",    sev: "w", txt: "Motor current high",                sys: "winding" },
+  { bit: 3,  id: "CUR_CRIT",    sev: "a", txt: "Overcurrent",                       sys: "winding" },
+  { bit: 4,  id: "STALL",       sev: "a", txt: "Locked rotor / stall",              sys: "mech" },
+  { bit: 5,  id: "VIB_WARN",    sev: "w", txt: "Vibration above warning level",     sys: "mech" },
+  { bit: 6,  id: "VIB_CRIT",    sev: "a", txt: "Vibration critical",                sys: "mech" },
+  { bit: 7,  id: "UNDERVOLT",   sev: "w", txt: "Supply under-voltage",              sys: "supply" },
+  { bit: 8,  id: "NO_LOAD",     sev: "w", txt: "Supply present but no motor current", sys: "winding" },
+  { bit: 9,  id: "IMPULSIVE",   sev: "w", txt: "Impulsive vibration (impacts)",     sys: "mech" },
+  { bit: 10, id: "SNS_TEMP",    sev: "w", txt: "LM35 temperature sensor fault",     sys: "instr" },
+  { bit: 11, id: "SNS_IMU",     sev: "w", txt: "MPU6050 vibration sensor fault",    sys: "instr" },
+  { bit: 12, id: "SNS_CUR",     sev: "w", txt: "ACS712 current sensor fault",       sys: "instr" },
+  { bit: 13, id: "SNS_RPM",     sev: "w", txt: "Speed sensor not pulsing",          sys: "speed" },
+  { bit: 14, id: "NO_SUPPLY",   sev: "a", txt: "Motor supply absent",               sys: "supply" },
+  { bit: 15, id: "MANUAL_STOP", sev: "a", txt: "Manually isolated by operator",     sys: "supply" },
+];
+const faultList = f => FAULTS.filter(x => f & (1 << x.bit));
+const STATUS = ["NORMAL", "WARNING", "ALARM", "TRIPPED"];
+
+/* ---------------- configuration (mirrors firmware defaults) ---------- */
+let cfg = Object.assign({ tw: 45, tc: 60, iw: 0.6, ic: 1.0, vw: 0.35, vc: 0.7, stall: 0.4, uv: 4.4, sens: 0.066, ppr: 1, autotrip: 1 }, store.get("cfg3", {}));
+
+/* =====================================================================
+ *  Ring-buffer history
+ * ===================================================================== */
+const HIST_MAX = 3600;        // 15 min @ 4 Hz
+const H = { t: [], rpm: [], i: [], v: [], p: [], tc: [], vr: [], vp: [], h: [] };
+function pushHist(d, tsec) {
+  H.t.push(tsec);
+  for (const k of ["rpm", "i", "v", "p", "tc", "vr", "vp"]) H[k].push(d[k] == null ? NaN : d[k]);
+  H.h.push(state.hi);
+  if (H.t.length > HIST_MAX) for (const k in H) H[k].shift();
+}
+
+/* =====================================================================
+ *  Canvas time-series chart (DPR aware, hover tooltip)
+ * ===================================================================== */
+class TimeChart {
+  constructor(host, opt) {
+    this.host = host; this.opt = opt;
+    this.cv = document.createElement("canvas"); host.appendChild(this.cv);
+    this.tip = document.createElement("div"); this.tip.className = "tip"; host.appendChild(this.tip);
+    this.ctx = this.cv.getContext("2d"); this.hover = null;
+    new ResizeObserver(() => this.draw()).observe(host);
+    this.cv.addEventListener("mousemove", e => { const r = this.cv.getBoundingClientRect(); this.hover = e.clientX - r.left; this.draw(); });
+    this.cv.addEventListener("mouseleave", () => { this.hover = null; this.tip.style.display = "none"; this.draw(); });
+  }
+  css(n) { return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+  draw() {
+    const W = this.host.clientWidth, Hh = this.host.clientHeight, dpr = window.devicePixelRatio || 1;
+    if (!W || !Hh) return;
+    if (this.cv.width !== W * dpr || this.cv.height !== Hh * dpr) { this.cv.width = W * dpr; this.cv.height = Hh * dpr; }
+    const c = this.ctx; c.setTransform(dpr, 0, 0, dpr, 0, 0); c.clearRect(0, 0, W, Hh);
+    const o = this.opt, pad = { l: 44, r: o.right ? 44 : 12, t: 8, b: 22 };
+    const pw = W - pad.l - pad.r, phh = Hh - pad.t - pad.b;
+    const win = state.window, tEnd = H.t.length ? H.t[H.t.length - 1] : 0, tStart = tEnd - win;
+    let i0 = 0; while (i0 < H.t.length && H.t[i0] < tStart) i0++;
+    const X = t => pad.l + (t - tStart) / win * pw;
+    const grid = this.css("--line"), muted = this.css("--dim");
+    c.font = "10.5px " + this.css("--mono"); c.fillStyle = muted; c.strokeStyle = grid; c.lineWidth = 1;
+
+    const axes = [o.series.filter(s => !s.right), o.series.filter(s => s.right)];
+    const ranges = axes.map((ser, ai) => {
+      let lo = Infinity, hi = -Infinity;
+      for (const s of ser) for (let i = i0; i < H.t.length; i++) { const v = H[s.key][i]; if (isFinite(v)) { lo = Math.min(lo, v); hi = Math.max(hi, v); } }
+      const extra = ai === 0 ? (o.lines || []).map(l => l.value()).filter(isFinite) : [];
+      if (o.forecast && ai === 0 && state.forecast) extra.push(state.forecast.end);
+      for (const e of extra) { if (o.includeLines !== false) { lo = Math.min(lo, e); hi = Math.max(hi, e); } }
+      if (!isFinite(lo)) { lo = 0; hi = 1; }
+      if (o.zero && ai === 0) lo = Math.min(0, lo);
+      if (o.zeroR && ai === 1) lo = Math.min(0, lo);
+      const zeroFloor = (o.zero && ai === 0) || (o.zeroR && ai === 1);
+      if (hi - lo < (o.minSpan?.[ai] ?? 1e-3)) { const m = (hi + lo) / 2, s = (o.minSpan?.[ai] ?? 1e-3) / 2; lo = m - s; hi = m + s; if (zeroFloor && lo < 0) { hi -= lo; lo = 0; } }
+      const p = (hi - lo) * 0.12; return [lo - (lo === 0 ? 0 : p), hi + p];
+    });
+    const Y = (v, ai) => { const [lo, hi] = ranges[ai]; return pad.t + phh - (v - lo) / (hi - lo) * phh; };
+
+    // grid + labels
+    c.textAlign = "right"; c.textBaseline = "middle";
+    for (let k = 0; k <= 4; k++) {
+      const y = pad.t + phh * k / 4; c.beginPath(); c.moveTo(pad.l, y + .5); c.lineTo(W - pad.r, y + .5); c.stroke();
+      const v0 = ranges[0][1] - (ranges[0][1] - ranges[0][0]) * k / 4; c.fillText(niceNum(v0), pad.l - 6, y);
+      if (o.right) { c.textAlign = "left"; const v1 = ranges[1][1] - (ranges[1][1] - ranges[1][0]) * k / 4; c.fillText(niceNum(v1), W - pad.r + 6, y); c.textAlign = "right"; }
+    }
+    c.textAlign = "center"; c.textBaseline = "top";
+    const step = win <= 60 ? 10 : win <= 300 ? 60 : 180;
+    for (let t = Math.ceil(tStart / step) * step; t <= tEnd; t += step) { const x = X(t); c.fillText("-" + fmtDur(tEnd - t), x, Hh - pad.b + 6); }
+
+    // thresholds
+    for (const l of (o.lines || [])) {
+      const v = l.value(); if (!isFinite(v)) continue; const y = Y(v, 0); if (y < pad.t || y > pad.t + phh) continue;
+      c.save(); c.setLineDash([4, 4]); c.strokeStyle = this.css(l.color); c.globalAlpha = .75; c.beginPath(); c.moveTo(pad.l, y); c.lineTo(W - pad.r, y); c.stroke();
+      c.globalAlpha = 1; c.fillStyle = this.css(l.color); c.textAlign = "left"; c.textBaseline = "bottom"; c.fillText(l.label, pad.l + 4, y - 2); c.restore();
+    }
+    // series
+    for (const s of o.series) {
+      const ai = s.right ? 1 : 0, col = this.css(s.color);
+      if (s.fill) {
+        c.beginPath(); let started = false;
+        for (let i = i0; i < H.t.length; i++) { const v = H[s.key][i]; if (!isFinite(v)) continue; const x = X(H.t[i]), y = Y(v, ai); if (!started) { c.moveTo(x, pad.t + phh); c.lineTo(x, y); started = true; } else c.lineTo(x, y); }
+        if (started) { c.lineTo(X(tEnd), pad.t + phh); c.closePath(); const g = c.createLinearGradient(0, pad.t, 0, pad.t + phh); g.addColorStop(0, col + "55"); g.addColorStop(1, col + "00"); c.fillStyle = g; c.fill(); }
+      }
+      c.beginPath(); c.strokeStyle = col; c.lineWidth = s.width || 1.8; c.globalAlpha = s.alpha || 1; let pen = false;
+      for (let i = i0; i < H.t.length; i++) { const v = H[s.key][i]; if (!isFinite(v)) { pen = false; continue; } const x = X(H.t[i]), y = Y(v, ai); pen ? c.lineTo(x, y) : c.moveTo(x, y); pen = true; }
+      c.stroke(); c.globalAlpha = 1;
+    }
+    // forecast
+    if (o.forecast && state.forecast && H.t.length) {
+      const f = state.forecast; c.save(); c.setLineDash([3, 4]); c.strokeStyle = this.css("--c5"); c.globalAlpha = .7; c.lineWidth = 1.6;
+      const xa = X(tEnd), ya = Y(f.start, 0), xb = W - pad.r, yb = Y(f.start + f.slope * (win * 0.25), 0);
+      c.beginPath(); c.moveTo(xa, ya); c.lineTo(xb, yb); c.stroke(); c.restore();
+    }
+    // hover
+    if (this.hover != null && H.t.length) {
+      const tH = tStart + (this.hover - pad.l) / pw * win; let bi = -1, bd = Infinity;
+      for (let i = i0; i < H.t.length; i++) { const d = Math.abs(H.t[i] - tH); if (d < bd) { bd = d; bi = i; } }
+      if (bi >= 0) {
+        const x = X(H.t[bi]); c.strokeStyle = muted; c.beginPath(); c.moveTo(x + .5, pad.t); c.lineTo(x + .5, pad.t + phh); c.stroke();
+        let html = `<div style="color:var(--muted)">-${fmtDur(tEnd - H.t[bi])}</div>`;
+        for (const s of o.series) { const v = H[s.key][bi]; html += `<div><span style="color:var(${s.color})">■</span> ${s.label} <b>${fmt(v, s.dec ?? 2)}</b></div>`;
+          if (isFinite(v)) { c.fillStyle = this.css(s.color); c.beginPath(); c.arc(x, Y(v, s.right ? 1 : 0), 3, 0, 7); c.fill(); } }
+        this.tip.innerHTML = html; this.tip.style.display = "block";
+        const tw = this.tip.offsetWidth; this.tip.style.left = (x + 12 + tw > W ? x - tw - 12 : x + 12) + "px"; this.tip.style.top = "8px";
+      }
+    }
+  }
+}
+function niceNum(v) { const a = Math.abs(v); return a >= 1000 ? v.toFixed(0) : a >= 100 ? v.toFixed(0) : a >= 10 ? v.toFixed(1) : a >= 1 ? v.toFixed(2) : v.toFixed(2); }
+function fmtDur(s) { s = Math.max(0, Math.round(s)); if (s < 60) return s + "s"; const m = Math.floor(s / 60), r = s % 60; return r ? `${m}m${String(r).padStart(2, "0")}` : m + "m"; }
+
+/* sparkline */
+function spark(cv, arr, color) {
+  const W = cv.clientWidth, Hh = cv.clientHeight, dpr = window.devicePixelRatio || 1; if (!W) return;
+  if (cv.width !== W * dpr) { cv.width = W * dpr; cv.height = Hh * dpr; }
+  const c = cv.getContext("2d"); c.setTransform(dpr, 0, 0, dpr, 0, 0); c.clearRect(0, 0, W, Hh);
+  const n = Math.min(arr.length, 240), a = arr.slice(arr.length - n).filter(isFinite); if (a.length < 2) return;
+  let lo = Math.min(...a), hi = Math.max(...a); if (hi - lo < 1e-6) { hi += .5; lo -= .5; }
+  const col = getComputedStyle(document.documentElement).getPropertyValue(color).trim();
+  c.beginPath(); a.forEach((v, i) => { const x = i / (a.length - 1) * W, y = Hh - 2 - (v - lo) / (hi - lo) * (Hh - 4); i ? c.lineTo(x, y) : c.moveTo(x, y); });
+  c.strokeStyle = col; c.lineWidth = 1.5; c.stroke();
+  c.lineTo(W, Hh); c.lineTo(0, Hh); c.closePath(); const g = c.createLinearGradient(0, 0, 0, Hh); g.addColorStop(0, col + "44"); g.addColorStop(1, col + "00"); c.fillStyle = g; c.fill();
+}
+
+/* =====================================================================
+ *  Application state
+ * ===================================================================== */
+const state = {
+  mode: "off",            // off | serial | demo
+  last: null, lastAt: 0, frames: 0, errors: 0, rateT: [], t0: performance.now(),
+  hi: NaN, anomaly: NaN, trendPenalty: 0, forecast: null,
+  baseline: null, learn: [], prevFaults: 0, prevTrip: 0, acked: 0, window: 120,
+  rec: null, devCfg: null, boot: null,
+};
+
+/* =====================================================================
+ *  KPI tiles
+ * ===================================================================== */
+const KPI = [
+  { key: "rpm", label: "Speed",       unit: "RPM", dec: 0, color: "--c4", base: true },
+  { key: "i",   label: "Current",     unit: "A",   dec: 3, color: "--c1", warn: () => cfg.iw, crit: () => cfg.ic, base: true },
+  { key: "v",   label: "Supply",      unit: "V",   dec: 2, color: "--c1", low: () => cfg.uv },
+  { key: "p",   label: "Power",       unit: "W",   dec: 2, color: "--c2" },
+  { key: "tc",  label: "Temperature", unit: "°C",  dec: 1, color: "--c5", warn: () => cfg.tw, crit: () => cfg.tc },
+  { key: "vr",  label: "Vibration",   unit: "g RMS", dec: 3, color: "--c3", warn: () => cfg.vw, crit: () => cfg.vc, base: true },
+];
+function buildKpis() {
+  $("kpis").innerHTML = KPI.map(k => `
+   <div class="panel kpi" id="k_${k.key}">
+     <div class="k"><span>${k.label}</span><span class="tag x" id="kt_${k.key}">—</span></div>
+     <div class="v"><b id="kv_${k.key}">--</b><span>${k.unit}</span></div>
+     <div class="meta"><span id="km_${k.key}">&nbsp;</span><span id="kz_${k.key}"></span></div>
+     <canvas id="ks_${k.key}"></canvas>
+   </div>`).join("");
+}
+function kpiLevel(k, v) {
+  if (!isFinite(v)) return "x";
+  if (k.crit && v >= k.crit()) return "a";
+  if (k.warn && v >= k.warn()) return "w";
+  if (k.low && v < k.low()) return "w";
+  return "o";
+}
+
+/* =====================================================================
+ *  Isolation matrix
+ * ===================================================================== */
+const SUBSYS = [
+  { id: "supply",  name: "Power Supply" },
+  { id: "winding", name: "Motor Electrical" },
+  { id: "thermal", name: "Thermal" },
+  { id: "mech",    name: "Mechanical / Rotor" },
+  { id: "speed",   name: "Speed Sensing" },
+  { id: "instr",   name: "Instrumentation" },
+];
+function buildMatrix() {
+  $("matrix").innerHTML = SUBSYS.map(s => `<div class="cell" id="m_${s.id}"><div class="t"><span>${s.name}</span><span class="lamp" id="ml_${s.id}"></span></div><div class="m" id="mm_${s.id}">—</div></div>`).join("");
+}
+
+/* =====================================================================
+ *  Config editor
+ * ===================================================================== */
+const CFG_FIELDS = [
+  ["tw", "Temp warning (°C)"], ["tc", "Temp trip (°C)"], ["iw", "Current warning (A)"], ["ic", "Current trip (A)"],
+  ["vw", "Vibration warning (g)"], ["vc", "Vibration trip (g)"], ["stall", "Stall current (A)"], ["uv", "Under-voltage (V)"],
+  ["sens", "ACS712 sensitivity (V/A)"], ["ppr", "IR pulses / rev"],
+];
+function buildCfg() {
+  $("cfg").innerHTML = CFG_FIELDS.map(([k, l]) => `<label>${l}<input class="mono" id="cf_${k}" value="${cfg[k]}" inputmode="decimal"></label>`).join("") +
+    `<label>Auto-trip on critical<select id="cf_autotrip"><option value="1">Enabled</option><option value="0">Disabled (monitor only)</option></select></label>`;
+  $("cf_autotrip").value = String(cfg.autotrip ? 1 : 0);
+}
+function readCfgForm() {
+  for (const [k] of CFG_FIELDS) { const v = parseFloat($("cf_" + k).value); if (isFinite(v)) cfg[k] = v; }
+  cfg.autotrip = +$("cf_autotrip").value; store.set("cfg3", cfg);
+}
+function fillCfgForm() { for (const [k] of CFG_FIELDS) if (document.activeElement !== $("cf_" + k)) $("cf_" + k).value = cfg[k]; $("cf_autotrip").value = String(cfg.autotrip ? 1 : 0); }
+
+/* =====================================================================
+ *  Analytics: baseline learning, anomaly, trend forecasting
+ * ===================================================================== */
+const BASE_KEYS = [
+  { key: "rpm", label: "Speed",          floor: 3 },
+  { key: "i",   label: "Current",        floor: 0.01 },
+  { key: "vr",  label: "Vibration RMS",  floor: 0.006 },
+  { key: "ku",  label: "Kurtosis",       floor: 0.25 },
+  { key: "p",   label: "Power",          floor: 0.05 },
+];
+const LEARN_N = 120;  // 30 s @ 4 Hz
+function running(d) { return d.tr === 0 && d.i > 0.05 && (d.f & ((1 << 1) | (1 << 3) | (1 << 4) | (1 << 6))) === 0; }
+
+function updateBaseline(d) {
+  if (state.baseline) return;
+  if (!running(d)) { if (state.learn.length) state.learn.length = Math.max(0, state.learn.length - 4); return; }
+  state.learn.push(d);
+  if (state.learn.length >= LEARN_N) {
+    const b = {};
+    for (const k of BASE_KEYS) {
+      const a = state.learn.map(x => x[k.key]).filter(isFinite);
+      const m = a.reduce((s, v) => s + v, 0) / a.length;
+      const sd = Math.sqrt(a.reduce((s, v) => s + (v - m) ** 2, 0) / a.length);
+      b[k.key] = { m, sd: Math.max(sd, k.floor) };
+    }
+    b.at = new Date(); state.baseline = b; store.set("baseline", b);
+    logEvent("i", "Analytics", `Baseline learned from ${LEARN_N} samples (RPM ${fmt(b.rpm.m, 0)}, I ${fmt(b.i.m, 3)} A, Vib ${fmt(b.vr.m, 3)} g)`);
+  }
+}
+function zScores(d) {
+  if (!state.baseline) return null;
+  const z = {}; for (const k of BASE_KEYS) { const b = state.baseline[k.key]; z[k.key] = (d[k.key] - b.m) / b.sd; } return z;
+}
+function linfit(xs, ys) {
+  const n = xs.length; if (n < 8) return null;
+  let sx = 0, sy = 0, sxx = 0, sxy = 0, syy = 0;
+  for (let i = 0; i < n; i++) { sx += xs[i]; sy += ys[i]; sxx += xs[i] * xs[i]; sxy += xs[i] * ys[i]; syy += ys[i] * ys[i]; }
+  const den = n * sxx - sx * sx; if (Math.abs(den) < 1e-9) return null;
+  const slope = (n * sxy - sx * sy) / den, icpt = (sy - slope * sx) / n;
+  const r2den = (n * syy - sy * sy); const r2 = r2den > 1e-12 ? ((n * sxy - sx * sy) ** 2) / (den * r2den) : 0;
+  return { slope, icpt, r2 };
+}
+function trend(key, secs) {
+  const tEnd = H.t[H.t.length - 1]; const xs = [], ys = [];
+  for (let i = H.t.length - 1; i >= 0 && H.t[i] >= tEnd - secs; i--) if (isFinite(H[key][i])) { xs.push(H.t[i] - tEnd); ys.push(H[key][i]); }
+  const f = linfit(xs, ys); if (!f) return null; f.now = f.icpt; return f;
+}
+/* First-order thermal model (Newton heating):  dT/dt = k (T_inf - T)
+ * Fit dT/dt = a + b*T on 5-s buckets of the last 4 minutes. If b<0 the motor is
+ * settling: T_inf = -a/b, k = -b. Warm-up after start-up then predicts a steady
+ * state instead of a straight-line "will overheat" false alarm. */
+function thermalModel(cur) {
+  const tEnd = H.t[H.t.length - 1]; const bt = [], bv = [];
+  let i = H.t.length - 1;
+  while (i >= 0 && H.t[i] >= tEnd - 240) {
+    const b0 = Math.floor((tEnd - H.t[i]) / 5); let s = 0, n = 0;
+    while (i >= 0 && Math.floor((tEnd - H.t[i]) / 5) === b0) { if (isFinite(H.tc[i])) { s += H.tc[i]; n++; } i--; }
+    if (n) { bt.unshift(tEnd - b0 * 5); bv.unshift(s / n); }
+  }
+  if (bv.length < 10) return null;
+  const xs = [], ys = [];
+  for (let j = 1; j < bv.length - 1; j++) { xs.push(bv[j]); ys.push((bv[j + 1] - bv[j - 1]) / (bt[j + 1] - bt[j - 1])); }
+  const span = Math.max(...bv) - Math.min(...bv);
+  const f = linfit(xs, ys); if (!f || span < 0.4) return null;
+  const k = -f.slope; if (!(k > 1 / 3600 && k < 1 / 10)) return null;
+  const Tinf = f.icpt / k;
+  if (!isFinite(Tinf) || Tinf < cur - 15 || Tinf > cur + 80) return null;
+  let ttw;
+  if (cur >= cfg.tw) ttw = { txt: "EXCEEDED", s: 0 };
+  else if (Tinf <= cfg.tw) ttw = { txt: "not reached", s: Infinity };
+  else { const s = -Math.log((Tinf - cfg.tw) / (Tinf - cur)) / k; ttw = { txt: s > 3 * 3600 ? "> 3 h" : fmtDur(s), s }; }
+  return { Tinf, tau: 1 / k, ttw };
+}
+function timeTo(f, cur, limit) {
+  if (!f || f.slope <= 1e-5) return { txt: "stable", s: Infinity };
+  if (cur >= limit) return { txt: "EXCEEDED", s: 0 };
+  const s = (limit - cur) / f.slope; return { txt: s > 3600 * 3 ? "> 3 h" : fmtDur(s), s };
+}
+
+/* =====================================================================
+ *  Frame handling
+ * ===================================================================== */
+function onFrame(d) {
+  const now = performance.now();
+  state.frames++; state.rateT.push(now); while (state.rateT.length && now - state.rateT[0] > 3000) state.rateT.shift();
+  state.last = d; state.lastAt = now;
+  const tsec = (now - state.t0) / 1000;
+
+  updateBaseline(d);
+  const z = zScores(d);
+  // anomaly score: RMS of positive-significant z (ignore |z|<2), mapped to 0..100
+  if (z) {
+    let acc = 0, n = 0; for (const k of BASE_KEYS) { const v = Math.abs(z[k.key]); acc += Math.max(0, v - 2) ** 2; n++; }
+    const score = 100 * (1 - Math.exp(-Math.sqrt(acc / n) / 2.5));
+    state.anomaly = isFinite(state.anomaly) ? state.anomaly + 0.3 * (score - state.anomaly) : score;
+  } else state.anomaly = NaN;
+
+  pushHist(d, tsec);
+  // forecasting
+  const tT = trend("tc", 120), vT = trend("vr", 180);
+  const th = thermalModel(d.tc);
+  if (tT) tT.model = th;
+  state.forecast = tT ? { start: d.tc, slope: tT.slope, end: d.tc + tT.slope * state.window * 0.25 } : null;
+  const ttw = th ? th.ttw : timeTo(tT, d.tc, cfg.tw), vtw = timeTo(vT, d.vr, cfg.vw);
+  state.trendPenalty = clamp((isFinite(ttw.s) ? clamp(1 - ttw.s / 900, 0, 1) * 60 : 0) + (isFinite(vtw.s) ? clamp(1 - vtw.s / 900, 0, 1) * 40 : 0), 0, 100);
+
+  // composite health index
+  const devH = d.h;
+  const anomH = isFinite(state.anomaly) ? 100 - state.anomaly : 100;
+  const trH = 100 - state.trendPenalty;
+  state.hi = clamp(Math.min(devH, 0.55 * devH + 0.30 * anomH + 0.15 * trH), 0, 100);
+  if (d.tr) state.hi = Math.min(state.hi, 35);   // unresolved trip: asset not fit for service
+
+  handleEvents(d);
+  if (state.rec) state.rec.push(recordRow(d));
+  render(d, z, { ttw, vtw, tT, vT });
+}
+
+const logged = new Map();   // bit -> time it was first seen clear (null while active)
+function handleEvents(d) {
+  const added = d.f & ~state.prevFaults, now = performance.now();
+  // raise immediately; report "cleared" only after 4 s continuously clear (suppresses chatter)
+  for (const x of FAULTS) {
+    const on = !!(d.f & (1 << x.bit));
+    if (on) { if (!logged.has(x.bit)) logEvent(x.sev, "Controller", `${x.id} — ${x.txt}`); logged.set(x.bit, null); }
+    else if (logged.has(x.bit)) {
+      const since = logged.get(x.bit);
+      if (since == null) logged.set(x.bit, now);
+      else if (now - since > 4000) { logged.delete(x.bit); logEvent("o", "Controller", `${x.id} cleared`); }
+    }
+  }
+  if (d.tr && !state.prevTrip) { logEvent("a", "Protection", `MOTOR ISOLATED — ${faultList(d.tf).map(x => x.txt).join(", ") || "trip"}`); toast("Protection trip: motor isolated", "alarm"); state.acked = 0; }
+  if (!d.tr && state.prevTrip) logEvent("o", "Protection", "Trip reset — motor re-enabled");
+  if (added) state.acked = 0;
+  state.prevFaults = d.f; state.prevTrip = d.tr;
+}
+
+/* =====================================================================
+ *  Diagnosis engine (symptom → probable cause → action)
+ * ===================================================================== */
+function diagnose(d, z) {
+  const out = [], has = b => !!(d.f & (1 << b)), b = state.baseline;
+  const rpmDrop = b && d.rpm < b.rpm.m * 0.85 && d.rpm > 5;
+  if (d.tr) out.push({ sev: "a", title: "Motor isolated by protection", conf: 100,
+      cause: `Trip latched on <em>${faultList(d.tf).map(x => x.txt).join(", ") || "critical condition"}</em>. Supply to the motor is cut via the TRIP output.`,
+      act: "Remove the root cause listed below, then press <em>Reset trip</em> (dashboard or PA0 button)." });
+  if (has(15)) out.push({ sev: "a", title: "Operator emergency isolation", conf: 100, cause: "Isolation was commanded from the console.", act: "Verify the machine is safe, then reset the trip." });
+  if (has(14)) out.push({ sev: "a", title: "No motor supply", conf: 95, cause: "Supply voltage sense reads ≈ 0 V.", act: "Check the HW-131 output / 5 V input terminal and the supply adapter." });
+  if (has(4)) out.push({ sev: "a", title: "Locked rotor (stall)", conf: 92,
+      cause: `Current <em>${fmt(d.i, 2)} A</em> with zero speed and no vibration — the shaft is not turning while energised.`,
+      act: "Isolate supply. Check for a jammed wheel, stripped gearbox or obstruction. Do not re-energise until free to rotate." });
+  if (has(3) || has(2)) {
+    if (rpmDrop) out.push({ sev: has(3) ? "a" : "w", title: "Mechanical overload", conf: 85,
+      cause: `Current up to <em>${fmt(d.i, 2)} A</em> while speed fell to <em>${fmt(d.rpm, 0)} RPM</em> (baseline ${fmt(b.rpm.m, 0)}). Rising torque demand.`,
+      act: "Reduce the load, check for friction/binding in the gearbox or wheel rubbing on the frame." });
+    else out.push({ sev: has(3) ? "a" : "w", title: "Excess electrical load", conf: 70,
+      cause: `Current <em>${fmt(d.i, 2)} A</em> is above the warning limit without a speed drop.`,
+      act: "Check for winding/brush deterioration or a supply above rating. Verify ACS712 sensitivity setting." });
+  }
+  if (has(1) || has(0)) {
+    const hot = has(1) ? "a" : "w";
+    if (b && d.i <= b.i.m * 1.25) out.push({ sev: hot, title: "Overheating without overload", conf: 72,
+      cause: `Temperature <em>${fmt(d.tc, 1)} °C</em> while current is near normal — heat source is friction or poor cooling, not electrical load.`,
+      act: "Inspect bearings/gearbox lubrication, ventilation and ambient temperature. Check the LM35 is firmly bonded." });
+    else out.push({ sev: hot, title: "Thermal stress from load", conf: 78,
+      cause: `Temperature <em>${fmt(d.tc, 1)} °C</em> together with elevated current (I²R heating).`,
+      act: "Reduce duty cycle / load and let the motor cool." });
+  }
+  if (has(6) || has(5)) {
+    const imp = d.ku > 6;
+    out.push({ sev: has(6) ? "a" : "w", title: imp ? "Impacting — bearing / gear damage" : "Imbalance or loose mounting", conf: imp ? 74 : 70,
+      cause: imp ? `Vibration <em>${fmt(d.vr, 3)} g</em> with kurtosis <em>${fmt(d.ku, 1)}</em> and crest ${fmt(d.cf, 1)} — periodic impacts.`
+                 : `Vibration <em>${fmt(d.vr, 3)} g</em> with near-Gaussian kurtosis (${fmt(d.ku, 1)}) — smooth, periodic excitation at ${fmt(d.vf, 0)} Hz.`,
+      act: imp ? "Inspect gear teeth and bearings for wear or debris; check for loose screws." : "Check wheel balance, shaft alignment, and that the motor mount / tape is secure." });
+  } else if (has(9)) out.push({ sev: "w", title: "Early impact signature", conf: 60,
+      cause: `Kurtosis <em>${fmt(d.ku, 1)}</em> is high while overall vibration is still moderate — typical early bearing/gear defect.`, act: "Schedule inspection; trend kurtosis." });
+  if (has(7)) out.push({ sev: "w", title: "Supply sag", conf: 80, cause: `Supply <em>${fmt(d.v, 2)} V</em> below ${cfg.uv} V. Motor speed and torque will drop.`, act: "Use a 5 V / 2 A source, shorten supply wires, check HW-131 regulator heating." });
+  if (has(8)) out.push({ sev: "w", title: "Open circuit / motor disconnected", conf: 82, cause: "Supply is present but the motor draws no current and does not turn.", act: "Check motor leads, screw terminal and the ACS712 terminals; check motor brushes." });
+  if (has(13)) out.push({ sev: "w", title: "Speed sensor fault (not a machine fault)", conf: 75, cause: "Motor draws normal current and vibrates (so it is turning) but the TCRT5000 gives no pulses.", act: "Re-align the IR sensor to the marker (2–8 mm gap) and adjust its potentiometer until its LED blinks." });
+  if (has(10)) out.push({ sev: "w", title: "Temperature sensor fault (not a machine fault)", conf: 85, cause: "LM35 output is outside its plausible range — open wire or wrong pin order.", act: "Check LM35 pinout (+Vs, Vout, GND facing flat side) and the cable." });
+  if (has(11)) out.push({ sev: "w", title: "Vibration sensor offline (not a machine fault)", conf: 85, cause: "MPU6050 not responding on I²C1.", act: "Check SDA→PB7, SCL→PB6, VCC and GND at the motor end. The controller retries every 3 s." });
+  if (has(12)) out.push({ sev: "w", title: "Current sensor fault (not a machine fault)", conf: 80, cause: "ACS712 output stuck at a rail.", act: "Check ACS712 VCC (5 V) and the 10k/20k divider to PA2." });
+  if (!out.length && z) {
+    const dev = BASE_KEYS.map(k => ({ k, z: z[k.key] })).filter(x => Math.abs(x.z) >= 3).sort((a, b) => Math.abs(b.z) - Math.abs(a.z));
+    if (dev.length) out.push({ sev: "i", title: "Early deviation from learned baseline", conf: clamp(Math.round(50 + 8 * Math.abs(dev[0].z)), 50, 90),
+        cause: dev.map(x => `<em>${x.k.label}</em> ${x.z > 0 ? "+" : ""}${fmt(x.z, 1)}σ`).join(", ") + " — no limit crossed yet.",
+        act: "Predictive warning: inspect at next opportunity before it develops into a fault." });
+  }
+  if (!out.length) out.push({ sev: "o", title: "All subsystems healthy", conf: state.baseline ? 90 : 60,
+      cause: state.baseline ? "All channels inside protection limits and within ±3σ of the learned baseline." : "All channels inside protection limits. Baseline still being learned.",
+      act: "No action required." });
+  return out;
+}
+
+/* =====================================================================
+ *  Render
+ * ===================================================================== */
+function setLamp(id, lv) { $("ml_" + id).className = "lamp " + lv; $("m_" + id).className = "cell " + (lv === "o" ? "" : lv); }
+function sevOrder(a) { return a === "a" ? 3 : a === "w" ? 2 : a === "i" ? 1 : 0; }
+
+function render(d, z, pr) {
+  // gauge
+  const hi = state.hi, arc = 395.8 * clamp(hi, 0, 100) / 100;
+  $("gArc").setAttribute("stroke-dasharray", `${arc} 527.8`);
+  $("hNum").textContent = fmt(hi, 0);
+  const sb = $("stateBadge"); sb.textContent = STATUS[d.s] || "—"; sb.className = "state s" + d.s;
+  const fl = faultList(d.f | (d.tr ? d.tf : 0));   // while tripped, keep the latched root cause visible
+  $("stateLine").innerHTML = d.tr ? "Motor isolated — protection trip latched." : fl.length ? fl.map(x => x.txt).slice(0, 3).join(" · ") : "All monitored parameters within limits.";
+  const bar = (id, v, txt) => { const e = $(id); e.style.width = clamp(v, 0, 100) + "%"; e.style.background = v >= 80 ? "var(--ok)" : v >= 55 ? "var(--warn)" : "var(--alarm)"; $(id + "V").textContent = txt; };
+  bar("hbDev", d.h, fmt(d.h, 0));
+  bar("hbAn", isFinite(state.anomaly) ? 100 - state.anomaly : 0, isFinite(state.anomaly) ? fmt(100 - state.anomaly, 0) : "learn");
+  bar("hbTr", 100 - state.trendPenalty, fmt(100 - state.trendPenalty, 0));
+
+  // KPIs
+  for (const k of KPI) {
+    const v = d[k.key], lv = kpiLevel(k, v);
+    $("kv_" + k.key).textContent = fmt(v, k.dec);
+    $("k_" + k.key).className = "panel kpi " + (lv === "x" ? "" : lv);
+    const tag = $("kt_" + k.key); tag.className = "tag " + lv; tag.textContent = lv === "a" ? "CRIT" : lv === "w" ? "WARN" : lv === "o" ? "OK" : "—";
+    const meta = k.crit ? `warn ${k.warn()} · trip ${k.crit()}` : k.low ? `min ${k.low()} V` : k.key === "rpm" ? `${d.pc ?? 0} pulses` : `${fmt(d.v * 0 + d.i, 3)} A × ${fmt(d.v, 2)} V`;
+    $("km_" + k.key).textContent = meta;
+    $("kz_" + k.key).textContent = (z && z[k.key] != null) ? `${z[k.key] >= 0 ? "+" : ""}${fmt(z[k.key], 1)}σ` : "";
+    spark($("ks_" + k.key), H[k.key], k.color);
+  }
+
+  // matrix
+  const fsys = {}; for (const x of fl) { const cur = fsys[x.sys]; if (!cur || sevOrder(x.sev) > sevOrder(cur.sev)) fsys[x.sys] = x; }
+  const msg = {
+    supply: `${fmt(d.v, 2)} V supply` + (d.tr ? " · ISOLATED" : " · energised"),
+    winding: `${fmt(d.i, 3)} A · ${fmt(d.p, 2)} W`,
+    thermal: `${fmt(d.tc, 1)} °C` + (pr.tT ? ` · ${pr.tT.slope >= 0 ? "+" : ""}${fmt(pr.tT.slope * 60, 2)} °C/min` : ""),
+    mech: `${fmt(d.vr, 3)} g RMS · kurt ${fmt(d.ku, 1)}`,
+    speed: `${fmt(d.rpm, 0)} RPM · ${d.pc ?? 0} pulses`,
+    instr: ["IMU", "LM35", "ACS712", "V-sense"].map((n, i) => (d.ok & (1 << i)) ? null : n).filter(Boolean).join(", ") || "All sensors responding",
+  };
+  for (const s of SUBSYS) {
+    const f = fsys[s.id];
+    setLamp(s.id, f ? f.sev : "o");
+    $("mm_" + s.id).innerHTML = f ? `<b style="color:var(${f.sev === "a" ? "--alarm" : "--warn"})">${f.txt}</b><br><span style="color:var(--muted)">${msg[s.id]}</span>` : `<span style="color:var(--muted)">${msg[s.id]}</span>`;
+  }
+  $("faultCount").textContent = `${fl.length} active`; $("faultCount").className = "tag " + (fl.some(x => x.sev === "a") ? "a" : fl.length ? "w" : "o");
+
+  // diagnosis
+  const dg = diagnose(d, z);
+  $("diag").innerHTML = dg.slice(0, 4).map(x => `<div class="dcard ${x.sev}"><div class="h"><b>${x.title}</b><span class="conf">confidence ${x.conf}%</span></div><p>${x.cause}</p><p><em>Action:</em> ${x.act}</p></div>`).join("");
+
+  // predictive
+  if (state.baseline) { $("pBase").textContent = "LEARNED"; $("pBaseS").textContent = `at ${state.baseline.at instanceof Date ? state.baseline.at.toLocaleTimeString() : new Date(state.baseline.at).toLocaleTimeString()} · ${LEARN_N} samples`; }
+  else { $("pBase").textContent = `${Math.round(100 * state.learn.length / LEARN_N)}%`; $("pBaseS").textContent = running(d) ? "learning normal behaviour…" : "waiting for motor to run normally"; }
+  $("pAn").textContent = isFinite(state.anomaly) ? fmt(state.anomaly, 0) + " / 100" : "—";
+  $("pAn").style.color = state.anomaly >= 50 ? "var(--alarm)" : state.anomaly >= 20 ? "var(--warn)" : "";
+  $("pTtw").textContent = pr.ttw.txt; $("pTtw").style.color = pr.ttw.s < 300 ? "var(--alarm)" : pr.ttw.s < 900 ? "var(--warn)" : "";
+  $("pTtwS").textContent = pr.tT?.model ? `settles ≈ ${fmt(pr.tT.model.Tinf, 1)} °C · τ ${fmtDur(pr.tT.model.tau)} (1st-order fit)`
+    : pr.tT ? `${pr.tT.slope >= 0 ? "+" : ""}${fmt(pr.tT.slope * 60, 2)} °C/min · linear trend` : "collecting trend…";
+  $("pVtw").textContent = pr.vtw.txt; $("pVtw").style.color = pr.vtw.s < 300 ? "var(--alarm)" : pr.vtw.s < 900 ? "var(--warn)" : "";
+  $("pVtwS").textContent = pr.vT ? `${pr.vT.slope >= 0 ? "+" : ""}${fmt(pr.vT.slope * 60 * 1000, 1)} mg/min · R² ${fmt(pr.vT.r2, 2)}` : "collecting trend…";
+  $("ztable").innerHTML = BASE_KEYS.map(k => {
+    const zz = z ? z[k.key] : NaN, w = clamp(Math.abs(zz) / 6 * 50, 0, 50), col = Math.abs(zz) >= 3 ? "var(--alarm)" : Math.abs(zz) >= 2 ? "var(--warn)" : "var(--ok)";
+    const bar = isFinite(zz) ? `<i style="${zz >= 0 ? "left:50%" : "right:50%"};width:${w}%;background:${col}"></i>` : "";
+    return `<tr><td>${k.label}</td><td style="width:45%"><div class="zbar">${bar}</div></td><td class="mono" style="text-align:right">${isFinite(zz) ? (zz >= 0 ? "+" : "") + fmt(zz, 1) + "σ" : "—"}</td></tr>`;
+  }).join("");
+
+  // vibration signature
+  $("vF").textContent = fmt(d.vf, 1); $("vK").textContent = fmt(d.ku, 2); $("vC").textContent = fmt(d.cf, 2); $("vA").textContent = fmt(d.va, 3);
+  $("vK").style.color = d.ku > 6 ? "var(--alarm)" : d.ku > 4 ? "var(--warn)" : "";
+  $("vKs").textContent = d.ku > 6 ? "impulsive!" : d.ku > 4 ? "some impacts" : "3.0 = smooth";
+  const amax = Math.max(d.ax, d.ay, d.az, cfg.vw * 0.6, 1e-3);
+  for (const [k, id] of [["ax", "axX"], ["ay", "axY"], ["az", "axZ"]]) { $(id).style.width = clamp(100 * d[k] / amax, 0, 100) + "%"; $(id + "v").textContent = fmt(d[k], 3) + " g"; }
+
+  // banner
+  const sev = d.tr || d.s >= 2 ? "alarm" : d.s === 1 ? "warn" : null;
+  const bn = $("banner");
+  if (sev && !(state.acked && state.acked === d.f && !d.tr)) {
+    bn.className = "banner show " + sev;
+    $("bannerTitle").textContent = d.tr ? "PROTECTION TRIP — MOTOR ISOLATED" : sev === "alarm" ? "ALARM" : "WARNING";
+    $("bannerSub").textContent = (d.tr ? faultList(d.tf) : fl).map(x => x.txt).join(" · ");
+    $("btnBannerReset").style.display = d.tr ? "" : "none";
+  } else bn.className = "banner";
+
+  // device panel
+  const sensNames = [["IMU", "MPU6050 (I²C1)"], ["LM35", "Temperature (PA4, optional)"], ["ACS712", "ACS712 (PA2)"], ["V", "Supply sense (PA3)"]];
+  $("sens").innerHTML = sensNames.map((n, i) => `<div><span class="lamp ${(d.ok & (1 << i)) ? "o" : "a"}"></span>${n[1]}</div>`).join("");
+  const tt = $("tripTag"); tt.textContent = d.tr ? "TRIPPED" : cfg.autotrip ? "ARMED" : "MONITOR ONLY"; tt.className = "tag " + (d.tr ? "a" : cfg.autotrip ? "o" : "w");
+
+  drawCharts();
+}
+function drawCharts() { for (const c of charts) c.draw(); }
+
+/* =====================================================================
+ *  Event log
+ * ===================================================================== */
+const events = [];
+function logEvent(sev, src, msg) {
+  const e = { t: new Date(), sev, src, msg }; events.unshift(e); if (events.length > 500) events.pop();
+  const lab = { a: "ALARM", w: "WARNING", o: "CLEARED", i: "INFO" }[sev] || sev;
+  const tr = document.createElement("tr");
+  tr.innerHTML = `<td class="mono">${e.t.toLocaleTimeString()}</td><td><span class="tag ${sev}">${lab}</span></td><td>${src}</td><td>${msg}</td>`;
+  $("evBody").prepend(tr); while ($("evBody").children.length > 500) $("evBody").lastChild.remove();
+  $("evEmpty").style.display = "none";
+}
+
+/* =====================================================================
+ *  Console + toast
+ * ===================================================================== */
+function con(line, cls) {
+  const el = $("console"), atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 30;
+  const div = document.createElement("div"); if (cls) div.className = cls; div.textContent = line; el.appendChild(div);
+  while (el.children.length > 400) el.firstChild.remove();
+  if (atBottom) el.scrollTop = el.scrollHeight;
+}
+function toast(msg, kind) {
+  const d = document.createElement("div"); d.textContent = msg; if (kind === "alarm") d.style.borderLeftColor = "var(--alarm)";
+  $("toast").appendChild(d); setTimeout(() => d.remove(), 4200);
+}
+
+/* =====================================================================
+ *  Line protocol
+ * ===================================================================== */
+function onLine(line) {
+  line = line.trim(); if (!line) return;
+  let o; try { o = JSON.parse(line); } catch { state.errors++; con(line, "er"); return; }
+  if (o.d) { if ($("conRaw").checked) con(line); onFrame(o.d); return; }
+  con(line, o.evt ? "ev" : "");
+  if (o.cfg) { state.devCfg = o.cfg; for (const k of ["tw", "tc", "iw", "ic", "vw", "vc", "stall", "uv", "sens", "ppr", "autotrip"]) if (o.cfg[k] != null) cfg[k] = o.cfg[k]; store.set("cfg3", cfg); fillCfgForm(); if (o.cfg.fw) $("fwTag").textContent = "FW " + o.cfg.fw; }
+  if (o.boot) { state.boot = o.boot; logEvent("i", "Controller", `Boot FW ${o.boot.fw} · IMU ${o.boot.imu ? "0x" + o.boot.imuAddr.toString(16) : "missing"} · LCD ${o.boot.lcd ? "0x" + o.boot.lcdAddr.toString(16) : "missing"}`); }
+  if (o.evt === "IMU_ONLINE") logEvent("o", "Controller", "Vibration sensor back online");
+  if (o.ack) { if (o.ack === "UNKNOWN" || !o.ok) toast(`Command rejected: ${o.ack}`); else if (o.ack !== "PING") toast(`Controller: ${o.ack} OK`); }
+}
+
+/* =====================================================================
+ *  Transport: Web Serial
+ * ===================================================================== */
+let port = null, reader = null, writer = null, keepReading = false;
+async function connectSerial() {
+  if (!("serial" in navigator)) { showModal("Web Serial not available", "Open this file in <b>Google Chrome</b> or <b>Microsoft Edge</b> (desktop). If it still says this, run <code>start_dashboard.bat</code> which serves it from http://localhost."); return; }
+  try {
+    port = await navigator.serial.requestPort();
+    await port.open({ baudRate: 115200, bufferSize: 8192 });
+  } catch (e) { if (e.name !== "NotFoundError") showModal("Could not open port", String(e.message || e) + "<br><br>Close Arduino Serial Monitor / other apps using this COM port and retry."); port = null; return; }
+  stopDemo(); setMode("serial"); resetSession();
+  writer = port.writable.getWriter();
+  keepReading = true; readLoop();
+  setTimeout(() => sendCmd("GET"), 600);
+  logEvent("i", "Console", "Connected to controller over USB-TTL");
+}
+async function readLoop() {
+  const dec = new TextDecoder(); let buf = "";
+  while (port && port.readable && keepReading) {
+    reader = port.readable.getReader();
+    try {
+      for (;;) { const { value, done } = await reader.read(); if (done) break;
+        buf += dec.decode(value, { stream: true }); let i;
+        while ((i = buf.indexOf("\n")) >= 0) { onLine(buf.slice(0, i)); buf = buf.slice(i + 1); }
+        if (buf.length > 4096) buf = ""; }
+    } catch (e) { con("read error: " + e.message, "er"); break; }
+    finally { try { reader.releaseLock(); } catch {} }
+  }
+  if (state.mode === "serial") disconnectSerial(true);
+}
+async function disconnectSerial(lost) {
+  keepReading = false;
+  try { if (reader) await reader.cancel(); } catch {}
+  try { if (writer) { writer.releaseLock(); } } catch {}
+  try { if (port) await port.close(); } catch {}
+  port = reader = writer = null; setMode("off");
+  logEvent(lost ? "w" : "i", "Console", lost ? "Serial link lost" : "Disconnected");
+}
+async function sendCmd(cmd) {
+  con("> " + cmd, "tx");
+  if (state.mode === "serial" && writer) { try { await writer.write(new TextEncoder().encode(cmd + "\n")); } catch (e) { toast("Write failed: " + e.message); } }
+  else if (state.mode === "demo") sim.command(cmd);
+  else toast("Not connected");
+}
+
+/* =====================================================================
+ *  Demo: virtual motor + virtual controller (same protocol & rules)
+ * ===================================================================== */
+const sim = {
+  timer: null, sc: "normal", t: 0, n: 0, tripped: false, tripCause: 0, temp: 29, amb: 29, vib: 0.07, pulses: 0,
+  timers: {}, cfg: null,
+  start() { this.cfg = Object.assign({}, cfg); this.t = 0; this.n = 0; this.tripped = false; this.temp = 29.5; this.timers = {}; this.rpm = 0; this.i = 0;
+    onLine(JSON.stringify({ boot: { fw: "2.0.0-sim", imu: 1, imuAddr: 104, lcd: 1, lcdAddr: 39 } })); this.sendCfg();
+    this.timer = setInterval(() => this.step(), 250); },
+  stop() { clearInterval(this.timer); this.timer = null; },
+  sendCfg() { onLine(JSON.stringify({ cfg: Object.assign({}, this.cfg, { fw: "2.0.0-sim" }) })); },
+  command(c) {
+    const p = c.trim().toUpperCase().split(/\s+/), ack = (a, ok = 1) => onLine(JSON.stringify({ ack: a, ok }));
+    if (p[0] === "RESET") { this.tripped = false; this.tripCause = 0; this.timers = {}; onLine('{"evt":"RESET"}'); ack("RESET"); }
+    else if (p[0] === "STOP") { this.trip(1 << 15); ack("STOP"); }
+    else if (p[0] === "GET") this.sendCfg();
+    else if (p[0] === "ZERO" || p[0] === "SAVE" || p[0] === "PING") ack(p[0]);
+    else if (p[0] === "SET" && p.length >= 3) { const k = p[1].toLowerCase(); if (k in this.cfg) { this.cfg[k] = parseFloat(p[2]); ack("SET"); this.sendCfg(); } else ack("SET", 0); }
+    else ack("UNKNOWN", 0);
+  },
+  trip(cause) { if (this.tripped) return; this.tripped = true; this.tripCause = cause; onLine(JSON.stringify({ evt: "TRIP", f: cause })); },
+  persist(name, cond, ms) { if (!cond) { delete this.timers[name]; return false; } this.timers[name] ??= this.t; return (this.t - this.timers[name]) * 1000 >= ms; },
+  step() {
+    const dt = 0.25; this.t += dt; const sc = this.sc, c = this.cfg, rnd = (s) => (Math.random() - 0.5) * 2 * s, gauss = () => (Math.random() + Math.random() + Math.random() - 1.5) / 1.5;
+    const age = this.t - (this.scAt || 0);
+    // physical targets
+    let V = 5.02, Inom = 0.19, rpm = 212, vib = 0.075, ku = 3.0, vf = 152, imu = true, tempOk = true;
+    if (sc === "overload") { const k = clamp(age / 25, 0, 1); Inom = 0.19 + 0.62 * k; rpm = 212 - 70 * k; vib = 0.09 + 0.05 * k; V = 5.02 - 0.18 * k; vf = 152 - 40 * k; }
+    if (sc === "stall") { Inom = 1.15; rpm = 0; vib = 0.008; V = 4.62; }
+    if (sc === "imbalance") { const k = clamp(age / 40, 0, 1); vib = 0.075 + 0.62 * k; ku = 2.6; vf = 152; Inom = 0.21 + 0.03 * k; }
+    if (sc === "bearing") { const k = clamp(age / 50, 0, 1); vib = 0.075 + 0.25 * k; ku = 3 + 6.5 * k; vf = 238; Inom = 0.2 + 0.05 * k; }
+    if (sc === "undervolt") { V = 4.18; rpm = 170; Inom = 0.17; }
+    if (sc === "open") { Inom = 0; rpm = 0; vib = 0.004; V = 5.08; }
+    if (sc === "imufail") imu = false;
+    if (sc === "tempfail") tempOk = false;
+    if (this.tripped) { Inom = 0; rpm = 0; vib = 0.004; V = 5.08; }
+    // dynamics
+    this.rpm += (rpm - this.rpm) * (this.tripped ? 0.35 : sc === "stall" ? 0.85 : 0.25);   // a jam stops the shaft almost instantly
+    this.i += (Inom - this.i) * 0.5;
+    const I = Math.max(0, this.i * (1 + 0.04 * gauss())), R = Math.max(0, this.rpm + (rpm > 0 ? gauss() * 2.2 : 0));
+    const heat = sc === "overheat" && !this.tripped ? 0.12 : 0;
+    const Ttarget = this.amb + 3 + 22 * I * I + (sc === "bearing" ? 6 * clamp(age / 50, 0, 1) : 0);
+    this.temp += (Ttarget - this.temp) * 0.004 + heat + rnd(0.03);
+    const vr = Math.max(0.002, vib * (1 + 0.08 * gauss()));
+    if (rpm > 0 || I > 0.05) this.pulses += Math.round(R / 60 * dt * c.ppr);
+    const d = { t: Math.round(this.t * 1000), n: this.n++, rpm: R < 3 ? 0 : R, i: I < 0.02 ? 0 : I, v: V + rnd(0.01), tc: tempOk ? this.temp : 0.4,
+      vr: imu ? vr : 0, vp: imu ? vr * (ku > 5 ? 5.2 : 2.9) * (1 + 0.1 * gauss()) : 0, ku: imu ? ku + rnd(0.25) : 0, vf: imu ? vf + rnd(2) : 0, va: imu ? vr * 0.8 : 0,
+      ax: imu ? vr * 0.62 : 0, ay: imu ? vr * 0.58 : 0, az: imu ? vr * 0.52 : 0, pc: this.pulses,
+      ok: (imu ? 1 : 0) | (tempOk ? 2 : 0) | 4 | 8 };
+    d.cf = d.vr > 0 ? d.vp / d.vr : 0; d.p = d.v * d.i;
+    // ------- mirror of firmware evaluate() -------
+    let f = 0; const has = (m) => d.ok & m;
+    if (!has(1)) f |= 1 << 11; if (!has(2)) f |= 1 << 10;
+    const hy = this.hy || (this.hy = {});
+    if (has(2)) { hy.t = d.tc >= c.tw || (hy.t && d.tc >= c.tw - 1); if (hy.t) f |= 1; if (this.persist("tc", d.tc >= c.tc, 1000)) f |= 2; }
+    hy.i = d.i >= c.iw || (hy.i && d.i >= 0.92 * c.iw); if (hy.i) f |= 4; if (this.persist("ic", d.i >= c.ic, 500)) f |= 8;
+    if (has(1)) { hy.v = d.vr >= c.vw || (hy.v && d.vr >= 0.9 * c.vw); if (hy.v) f |= 32; if (this.persist("vc", d.vr >= c.vc, 2000)) f |= 64;
+      hy.k = (d.ku > 6 && d.vr > 0.5 * c.vw) || (hy.k && d.ku > 5 && d.vr > 0.4 * c.vw); if (hy.k) f |= 512; }
+    if (d.v < c.uv) f |= 128;
+    const silent = !(has(1) && d.vr > 0.04);
+    if (!this.tripped && d.rpm < 5) { if (this.persist("st", d.i >= c.stall && silent, 1000)) f |= 16; if (d.i < 0.03) f |= 256; }
+    if ((f & 8) && !this.tripped && d.rpm < 5 && silent) f |= 16;
+    if (this.tripped && (this.tripCause & (1 << 15))) f |= 1 << 15;
+    if (c.autotrip && (f & (2 | 8 | 16 | 64))) this.trip(f & (2 | 8 | 16 | 64));
+    const sev = (x, w, cr) => { const s0 = 0.7 * w; return x <= s0 ? 0 : x >= cr ? 1 : (x - s0) / (cr - s0); };
+    const s = [has(2) ? sev(d.tc, c.tw, c.tc) : 0, sev(d.i, c.iw, c.ic), has(1) ? sev(d.vr, c.vw, c.vc) : 0, f & 16 ? 1 : 0];
+    let h = 100 - 65 * Math.max(...s) - 35 * (s.reduce((a, b) => a + b, 0) / 4); if (f & 512) h -= 10; if (f & 128) h -= 5; if ((f & (0xF << 10)) && h > 60) h = 60;
+    d.h = Math.max(0, h); d.f = f; d.tr = this.tripped ? 1 : 0; d.tf = this.tripCause;
+    d.s = this.tripped ? 3 : (f & (2 | 8 | 16 | 64 | (1 << 14))) ? 2 : f ? 1 : 0;
+    onLine(JSON.stringify({ d }));
+  },
+};
+function startDemo() { if (state.mode === "serial") return; resetSession(); setMode("demo"); sim.start(); $("inject").classList.add("show"); logEvent("i", "Console", "Demo mode started — simulated motor"); }
+function stopDemo() { if (sim.timer) { sim.stop(); logEvent("i", "Console", "Demo stopped"); } $("inject").classList.remove("show"); if (state.mode === "demo") setMode("off"); }
+
+/* =====================================================================
+ *  Session / mode / recording
+ * ===================================================================== */
+function resetSession() {
+  for (const k in H) H[k].length = 0; state.t0 = performance.now(); state.frames = 0; state.errors = 0;
+  state.baseline = null; state.learn = []; state.anomaly = NaN; state.prevFaults = 0; state.prevTrip = 0; state.acked = 0; logged.clear();
+}
+function setMode(m) {
+  state.mode = m;
+  $("connDot").className = "dot " + (m === "serial" ? "live" : m === "demo" ? "demo" : "");
+  $("connText").textContent = m === "serial" ? "Live · " + (port?.getInfo?.().usbProductId ? "USB-TTL" : "COM") : m === "demo" ? "Demo (simulated)" : "Offline";
+  $("btnConnect").querySelector("span").textContent = m === "serial" ? "Disconnect" : "Connect";
+  $("btnDemo").querySelector("span").textContent = m === "demo" ? "Stop demo" : "Demo";
+  $("btnDemo").disabled = m === "serial";
+}
+const REC_COLS = ["iso_time", "t_ms", "rpm", "current_A", "voltage_V", "power_W", "temp_C", "vib_rms_g", "vib_peak_g", "crest", "kurtosis", "vib_freq_Hz", "vib_amp_g", "ax_g", "ay_g", "az_g", "device_health", "health_index", "anomaly", "status", "faults", "fault_names", "tripped"];
+function recordRow(d) {
+  return [new Date().toISOString(), d.t, d.rpm, d.i, d.v, d.p, d.tc, d.vr, d.vp, d.cf, d.ku, d.vf, d.va, d.ax, d.ay, d.az, d.h, fmt(state.hi, 1), fmt(state.anomaly, 1), STATUS[d.s], d.f, faultList(d.f).map(x => x.id).join("|"), d.tr];
+}
+function toggleRec() {
+  if (!state.rec) { state.rec = []; $("btnRec").classList.add("on"); $("btnRec").querySelector("span").textContent = "Stop & save"; logEvent("i", "Console", "Recording started"); }
+  else { const rows = state.rec; state.rec = null; $("btnRec").classList.remove("on"); $("btnRec").querySelector("span").textContent = "Record";
+    download(`telemetry_${stamp()}.csv`, [REC_COLS.join(","), ...rows.map(r => r.join(","))].join("\n"));
+    logEvent("i", "Console", `Recording saved (${rows.length} rows)`); }
+}
+function stamp() { const d = new Date(), p = n => String(n).padStart(2, "0"); return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`; }
+function download(name, text) { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([text], { type: "text/csv" })); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000); }
+function showModal(t, b) { $("mTitle").textContent = t; $("mBody").innerHTML = b; $("modal").classList.add("show"); }
+
+/* =====================================================================
+ *  Wire-up
+ * ===================================================================== */
+buildKpis(); buildMatrix(); buildCfg();
+(function ticks() { let s = ""; for (let k = 0; k <= 10; k++) { const a = (135 + 270 * k / 10) * Math.PI / 180, r1 = 70, r2 = k % 5 ? 66 : 62;
+  s += `<line x1="${100 + r1 * Math.cos(a)}" y1="${100 + r1 * Math.sin(a)}" x2="${100 + r2 * Math.cos(a)}" y2="${100 + r2 * Math.sin(a)}" stroke="var(--dim)" stroke-width="1.5"/>`; } $("gTicks").innerHTML = s; })();
+
+const winSeg = `<div class="seg" data-win>${[[60, "1m"], [120, "2m"], [300, "5m"], [900, "15m"]].map(([s, l]) => `<button data-s="${s}" class="${s === 120 ? "on" : ""}">${l}</button>`).join("")}</div>`;
+document.querySelector("#chTemp").closest(".panel").querySelector(".ph .r").insertAdjacentHTML("afterbegin", winSeg);
+document.addEventListener("click", e => { const b = e.target.closest("[data-win] button"); if (!b) return; state.window = +b.dataset.s; document.querySelectorAll("[data-win] button").forEach(x => x.classList.toggle("on", +x.dataset.s === state.window)); drawCharts(); });
+
+const charts = [
+  new TimeChart($("chTemp"), { series: [{ key: "tc", label: "Temp °C", color: "--c5", fill: true, dec: 1 }], forecast: true, minSpan: [2],
+    lines: [{ value: () => cfg.tw, label: "WARN", color: "--warn" }, { value: () => cfg.tc, label: "TRIP", color: "--alarm" }] }),
+  new TimeChart($("chElec"), { series: [{ key: "i", label: "Current A", color: "--c1", fill: true, dec: 3 }, { key: "p", label: "Power W", color: "--c2", right: true, dec: 2 }], right: true, zero: true, zeroR: true, minSpan: [0.2, 1],
+    lines: [{ value: () => cfg.iw, label: "WARN", color: "--warn" }, { value: () => cfg.ic, label: "TRIP", color: "--alarm" }] }),
+  new TimeChart($("chVib"), { series: [{ key: "vr", label: "RMS g", color: "--c3", fill: true, dec: 3 }, { key: "vp", label: "Peak g", color: "--c6", alpha: .55, width: 1.2, dec: 3 }], zero: true, minSpan: [0.1],
+    lines: [{ value: () => cfg.vw, label: "WARN", color: "--warn" }, { value: () => cfg.vc, label: "TRIP", color: "--alarm" }] }),
+  new TimeChart($("chRpm"), { series: [{ key: "rpm", label: "RPM", color: "--c4", fill: true, dec: 0 }, { key: "v", label: "Supply V", color: "--c1", right: true, alpha: .7, dec: 2 }], right: true, zero: true, minSpan: [20, 0.5],
+    lines: [] }),
+];
+
+$("btnConnect").onclick = () => state.mode === "serial" ? disconnectSerial(false) : connectSerial();
+$("btnDemo").onclick = () => state.mode === "demo" ? stopDemo() : startDemo();
+$("btnRec").onclick = toggleRec;
+$("btnTheme").onclick = () => { const r = document.documentElement, t = r.dataset.theme === "light" ? "dark" : "light"; r.dataset.theme = t; store.set("theme", t); drawCharts(); if (state.last) for (const k of KPI) spark($("ks_" + k.key), H[k.key], k.color); };
+$("btnAck").onclick = () => { state.acked = state.last ? state.last.f : 0; $("banner").className = "banner"; logEvent("i", "Operator", "Alarm acknowledged"); };
+$("btnBannerReset").onclick = $("btnReset").onclick = () => { sendCmd("RESET"); logEvent("i", "Operator", "Trip reset requested"); };
+$("btnStop").onclick = () => { sendCmd("STOP"); logEvent("a", "Operator", "Emergency isolation commanded"); };
+$("btnZero").onclick = () => { if (confirm("Re-zero the current sensor?\n\nThe controller opens the relay for about 0.5 s so the motor draws 0 A, then restarts it.")) sendCmd("ZERO"); };
+$("btnApply").onclick = async () => { readCfgForm(); for (const [k] of CFG_FIELDS) await sendCmd(`SET ${k} ${cfg[k]}`); await sendCmd(`SET autotrip ${cfg.autotrip}`); toast("Settings sent to controller"); };
+$("btnSave").onclick = () => sendCmd("SAVE");
+$("btnRelearn").onclick = () => { state.baseline = null; state.learn = []; state.anomaly = NaN; logEvent("i", "Analytics", "Baseline relearn started"); };
+$("btnLogClear").onclick = () => { events.length = 0; $("evBody").innerHTML = ""; $("evEmpty").style.display = ""; };
+$("btnLogCsv").onclick = () => download(`events_${stamp()}.csv`, ["time,severity,source,message", ...events.slice().reverse().map(e => [e.t.toISOString(), e.sev, e.src, '"' + e.msg.replace(/"/g, "'") + '"'].join(","))].join("\n"));
+$("cmdSend").onclick = () => { const v = $("cmdIn").value.trim(); if (v) { sendCmd(v); $("cmdIn").value = ""; } };
+$("cmdIn").onkeydown = e => { if (e.key === "Enter") $("cmdSend").click(); };
+$("mClose").onclick = () => $("modal").classList.remove("show");
+document.querySelectorAll("#inject [data-sc]").forEach(b => b.onclick = () => {
+  sim.sc = b.dataset.sc; sim.scAt = sim.t; document.querySelectorAll("#inject [data-sc]").forEach(x => x.classList.toggle("sel", x === b));
+  logEvent("i", "Demo", `Injected scenario: ${b.textContent}`);
+});
+if (navigator.serial) navigator.serial.addEventListener("disconnect", e => { if (port && e.target === port) disconnectSerial(true); });
+document.documentElement.dataset.theme = store.get("theme", "dark");
+
+setInterval(() => {
+  const n = new Date(); $("clk").textContent = n.toLocaleTimeString();
+  const s = (performance.now() - state.t0) / 1000, p = x => String(Math.floor(x)).padStart(2, "0");
+  $("uptime").textContent = `session ${p(s / 3600)}:${p(s / 60 % 60)}:${p(s % 60)}`;
+  $("fFrames").textContent = `frames ${state.frames}`; $("fRate").textContent = `${fmt(state.rateT.length / 3, 1)} Hz`; $("fErr").textContent = `parse errors ${state.errors}`;
+  $("fRec").textContent = state.rec ? `● REC ${state.rec.length} rows` : "";
+  if (state.mode !== "off" && state.lastAt && performance.now() - state.lastAt > 3000) { $("connText").textContent = "No data — check wiring / baud"; $("connDot").className = "dot"; }
+}, 500);
+
+if (!("serial" in navigator)) con("Web Serial is not available in this browser. Use Chrome or Edge. Demo mode still works.", "er");
+else con("Ready. Click Connect and pick the USB-TTL COM port (CH340 / CP210x / FTDI / PL2303). Baud 115200.");
+</script>
+</body>
+</html>
